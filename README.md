@@ -5,6 +5,12 @@ charting, and diagnosing FrSky and generic telemetry CSV logs. The hosting
 server delivers only the application shell. CSV contents and derived results
 remain in the user's browser.
 
+The CSV parser is embedded in the application bundle and runs in a local worker,
+so importing a file does not fetch a separate parser script that could disappear
+after a deployment. If an older open tab reports a parser or network error,
+reload the application to get the current version; reloading preserves the local
+library. Offline-cache registration failures do not prevent local imports.
+
 ## Telemetry queries
 
 The log data explorer filters samples with readable expressions such as
@@ -20,6 +26,41 @@ Global unit preferences can convert altitude, distance, speed, vertical speed,
 temperature, and pressure across charts, statistics, maps, telemetry queries,
 and normalized CSV exports. Conversion is display-only: imported telemetry,
 diagnostic thresholds, and raw JSON reports retain their recorded values.
+
+## Flight insights
+
+Each log includes an incident review, historical comparisons, and RF redundancy
+analysis. Reviewing an episode selects its relevant channels and opens a chart
+window with ten seconds of context on each side. **Show full recording** restores
+the model's chart selection. JSON reports include the insights in recorded units;
+historical results carry a loading, ready, insufficient-data, or error status.
+
+- Incident review groups nearby diagnostic alerts within the same flight segment
+  and describes their recorded order. Proximity does not establish a shared cause.
+  Diagnostic hysteresis prevents threshold chatter, and missing samples or long
+  logging gaps reset alert continuity.
+- Historical analysis compares time-weighted medians in the current log's most
+  observed throttle or RPM band with up to 12 earlier logs for the same model.
+  It uses included segments and identical channel keys and units. Each signal
+  requires at least three distinct earlier logs, ten valid intervals and ten
+  seconds per log in the band, and 80% coverage. The comparison range is the
+  historical median ± the larger of three scaled median absolute deviations
+  (3 × 1.4826 × MAD) and a signal-specific minimum change allowance. It is a
+  screening heuristic, not a prediction interval. Flight phase, weather, pack
+  identity, and equipment changes are not controlled for.
+- RF analysis reports per-channel low durations and simultaneous low episodes
+  for independently identified links using the same metric. Model channel display
+  names can identify receivers (`RX1 VFR`, `RX2 VFR`) or bands (`VFR 2.4G`,
+  `VFR 900M`). Only use these names for separately recorded links. Duplicate or
+  ambiguous names are not paired. Thresholds use the highest enabled low-value
+  rule; VFR defaults to 50% if no rule exists, and RSSI requires a configured rule.
+  Values exactly at the threshold are excluded from low-duration measurements.
+
+Duration measurements omit missing observations, reversed or duplicate time,
+and intervals longer than four median sample periods (with a one-second minimum).
+Logs without sensor freshness flags cannot establish whether repeated values are
+fresh. Comparisons run locally, parse prior logs one at a time, and stop when the
+log view is closed. No historical data is uploaded.
 
 ## Development
 
@@ -79,7 +120,7 @@ The included workflow tests the app and deploys `dist/` after every push to
 `main`. In the repository's **Settings → Pages**, select **GitHub Actions** as
 the source. The default site URL is:
 
-<https://tstuli.github.io/FlightTrace/>
+<https://bt-flyer.github.io/FlightTrace/>
 
 GitHub Pages does not consume Cloudflare's `_headers` file, so equivalent
 security headers require a fronting CDN or custom hosting configuration.

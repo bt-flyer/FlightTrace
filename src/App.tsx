@@ -38,7 +38,7 @@ function AppShell() {
   else if (modelMatch) page = <ModelPage modelId={decodeURIComponent(modelMatch[1])} revision={revision} refresh={refresh} />
   else if (logMatch) page = <LogPage logId={decodeURIComponent(logMatch[1])} revision={revision} refresh={refresh} unitPreferences={unitPreferences} />
   else if (setupMatch) page = <SetupPage modelId={decodeURIComponent(setupMatch[1])} refresh={refresh} />
-  return <div className="app"><header className="site-header"><Link className="brand" to="/"><span className="brand-mark">✦</span><span>FLIGHT<em>TRACE</em></span></Link><nav><Link to="/">Library</Link><Link to="/units">Units</Link><Link to="/storage">Storage</Link></nav></header>{page}<footer><span>FlightTrace public beta · © 2026 FlightTrace contributors · <a href="https://github.com/tstuli/FlightTrace/blob/main/LICENSE" target="_blank" rel="noreferrer">GNU GPLv3</a></span><span>Telemetry analysis is advisory. Always follow equipment guidance. Provided “as is,” without warranties.</span></footer></div>
+  return <div className="app"><header className="site-header"><Link className="brand" to="/"><span className="brand-mark">✦</span><span>FLIGHT<em>TRACE</em></span></Link><nav><Link to="/">Library</Link><Link to="/units">Units</Link><Link to="/storage">Storage</Link></nav></header>{page}<footer><span>FlightTrace public beta · © 2026 FlightTrace contributors · <a href="https://github.com/bt-flyer/FlightTrace/blob/main/LICENSE" target="_blank" rel="noreferrer">GNU GPLv3</a></span><span>Telemetry analysis is advisory. Always follow equipment guidance. Provided “as is,” without warranties.</span></footer></div>
 }
 
 export default function App() { return <AppErrorBoundary><AppShell /></AppErrorBoundary> }

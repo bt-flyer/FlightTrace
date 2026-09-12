@@ -10,7 +10,7 @@ const colors = [
   '#38c6e8', '#ff8a52', '#e87fc2', '#7b8cff', '#b9d653', '#d9a9ff'
 ]
 
-export function TelemetryChart({ parsed, channelKeys, onCursorTimeChange, expanded = false, showPoints = false }: { parsed: ParsedLog; channelKeys: string[]; onCursorTimeChange?: (timestamp: number) => void; expanded?: boolean; showPoints?: boolean }) {
+export function TelemetryChart({ parsed, channelKeys, onCursorTimeChange, expanded = false, showPoints = false, focusRange }: { parsed: ParsedLog; channelKeys: string[]; onCursorTimeChange?: (timestamp: number) => void; expanded?: boolean; showPoints?: boolean; focusRange?: { startMs: number; endMs: number } }) {
   const hostRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -31,7 +31,7 @@ export function TelemetryChart({ parsed, channelKeys, onCursorTimeChange, expand
       cursor: { drag: { x: true, y: false, setScale: true } },
       legend: { show: true, live: true },
       hooks: { setCursor: [(plot) => { const index = plot.cursor.idx; if (index !== null && index !== undefined) onCursorTimeChange?.(parsed.timestamps[index]) }] },
-      scales: Object.fromEntries(units.map((unit) => [unit, { auto: true }])),
+      scales: { ...Object.fromEntries(units.map((unit) => [unit, { auto: true }])), x: { time: false } },
       axes: [
         { label: 'Elapsed time (seconds)', stroke: '#8fa5b8', grid: { stroke: '#1e3041' }, ticks: { stroke: '#355066' } },
         ...units.slice(0, 3).map((unit, index) => ({ scale: unit, label: unit, side: index % 2 ? 1 : 3, stroke: colors[index], grid: { show: index === 0, stroke: '#1e3041' }, ticks: { stroke: '#355066' } } as uPlot.Axis))
@@ -50,10 +50,19 @@ export function TelemetryChart({ parsed, channelKeys, onCursorTimeChange, expand
       ]
     }
     const chart = new uPlot(options, data, host)
-    const observer = new ResizeObserver(() => chart.setSize({ width: Math.max(320, host.clientWidth), height: chartHeight() }))
+    if (focusRange && focusRange.endMs > focusRange.startMs) chart.setScale('x', { min: (focusRange.startMs - parsed.startMs) / 1000, max: (focusRange.endMs - parsed.startMs) / 1000 })
+    let resizeFrame = 0
+    const observer = new ResizeObserver(() => {
+      cancelAnimationFrame(resizeFrame)
+      resizeFrame = requestAnimationFrame(() => {
+        const width = Math.max(320, host.clientWidth)
+        const height = chartHeight()
+        if (chart.width !== width || chart.height !== height) chart.setSize({ width, height })
+      })
+    })
     observer.observe(host)
-    return () => { observer.disconnect(); chart.destroy() }
-  }, [channelKeys, expanded, onCursorTimeChange, parsed, showPoints])
+    return () => { observer.disconnect(); cancelAnimationFrame(resizeFrame); chart.destroy() }
+  }, [channelKeys, expanded, onCursorTimeChange, parsed, showPoints, focusRange])
 
   if (!channelKeys.length) return <div className="empty-chart">Select at least one channel to draw a chart.</div>
   return <div className="chart-host" ref={hostRef} />

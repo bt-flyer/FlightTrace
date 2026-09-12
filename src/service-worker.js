@@ -28,7 +28,8 @@ async function cachePage(response) {
 }
 
 async function pageResponse(request) {
-  const cached = await caches.match('./index.html')
+  const cache = await caches.open(CACHE_NAME)
+  const cached = await cache.match('./index.html')
   if (pageCacheIsFresh(cached)) return cached
   try {
     const response = await fetch(request, { cache: 'no-store' })
@@ -54,17 +55,7 @@ async function precacheShell() {
   await cachePage(indexResponse)
   await cache.addAll([...new Set(['./app-icon.svg', './manifest.webmanifest', ...assets])])
 
-  const workerAssets = []
-  for (const scriptPath of assets.filter((path) => path.endsWith('.js'))) {
-    const scriptResponse = await cache.match(scriptPath, { ignoreVary: true })
-    if (!scriptResponse) continue
-    const source = await scriptResponse.text()
-    const scriptUrl = new URL(scriptPath, self.location.href)
-    for (const match of source.matchAll(/[A-Za-z0-9._-]+\.worker-[A-Za-z0-9_-]+\.js/g)) {
-      workerAssets.push(new URL(match[0], scriptUrl).href)
-    }
-  }
-  await cache.addAll([...new Set(workerAssets)])
+  // The CSV worker is embedded in the application script and cached with it.
 }
 
 self.addEventListener('install', (event) => {
@@ -72,7 +63,7 @@ self.addEventListener('install', (event) => {
 })
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key)))).then(() => self.clients.claim()))
+  event.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((key) => key.startsWith('flighttrace-shell-') && key !== CACHE_NAME).map((key) => caches.delete(key)))).then(() => self.clients.claim()))
 })
 
 self.addEventListener('fetch', (event) => {

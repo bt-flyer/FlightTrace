@@ -1,4 +1,5 @@
 import type { ParsedLog, WorkerRequest, WorkerResponse } from '../types'
+import CsvWorker from '../workers/csv.worker?worker&inline'
 
 export interface ParseProgress {
   progress: number
@@ -10,7 +11,9 @@ export function parseTelemetryFile(
   fileName: string,
   onProgress?: (progress: ParseProgress) => void
 ): { promise: Promise<ParsedLog>; cancel: () => void } {
-  const worker = new Worker(new URL('../workers/csv.worker.ts', import.meta.url), { type: 'module' })
+  // Keep the parser with the application code. An open tab must not depend on
+  // a hashed worker URL that a later GitHub Pages deployment can remove.
+  const worker = new CsvWorker()
   const requestId = crypto.randomUUID()
   let settled = false
   let rejectPromise: (reason?: unknown) => void = () => undefined
@@ -32,9 +35,12 @@ export function parseTelemetryFile(
       }
     })
     worker.addEventListener('error', (event) => {
+      // Report parser startup failures in the import UI instead of the global
+      // error boundary, which would hide access to the user's stored logs.
+      event.preventDefault()
       settled = true
       worker.terminate()
-      reject(new Error(event.message || 'The telemetry worker stopped unexpectedly.'))
+      reject(new Error(event.message || 'The log parser could not start. Reload FlightTrace, then select your CSV again. Your saved logs remain in this browser.'))
     })
     const request: WorkerRequest = { type: 'parse', requestId, file, fileName }
     worker.postMessage(request)

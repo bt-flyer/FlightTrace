@@ -11,6 +11,7 @@ export default defineConfig({
     name: 'flighttrace-service-worker',
     generateBundle(_options, bundle) {
       const hash = createHash('sha256')
+      hash.update(serviceWorkerTemplate)
       for (const [fileName, output] of Object.entries(bundle).sort(([left], [right]) => left.localeCompare(right))) {
         hash.update(fileName)
         hash.update(output.type === 'chunk' ? output.code : String(output.source))

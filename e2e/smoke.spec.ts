@@ -14,7 +14,7 @@ test('loads the flight library on desktop and mobile', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Restore backup', exact: true })).toBeVisible()
   await expect(page.getByText(/not saved on the server/)).toBeVisible()
   await expect(page.getByText(/Provided “as is,” without warranties/)).toBeVisible()
-  await expect(page.getByRole('link', { name: 'GNU GPLv3' })).toHaveAttribute('href', 'https://github.com/tstuli/FlightTrace/blob/main/LICENSE')
+  await expect(page.getByRole('link', { name: 'GNU GPLv3' })).toHaveAttribute('href', 'https://github.com/bt-flyer/FlightTrace/blob/main/LICENSE')
   await page.getByRole('link', { name: 'Storage' }).click()
   await expect(page.getByRole('heading', { name: 'Storage & backups' })).toBeVisible()
   await page.getByRole('link', { name: 'Units' }).click()
@@ -51,7 +51,9 @@ test('reloads the production app while offline', async ({ page, context, browser
   })
   expect(cachedShell.urls.some((url) => url.endsWith('/index.html'))).toBeTruthy()
   expect(cachedShell.urls.some((url) => url.includes('/assets/index-') && url.endsWith('.js'))).toBeTruthy()
-  expect(cachedShell.urls.some((url) => url.includes('/assets/csv.worker-') && url.endsWith('.js'))).toBeTruthy()
+  // The parser is embedded in the cached application; no separate worker URL
+  // may be required after an update or while offline.
+  expect(cachedShell.urls.some((url) => url.includes('/assets/csv.worker-'))).toBeFalsy()
   expect(cachedShell.cachedAt).not.toBeNull()
   expect(Date.now() - cachedShell.cachedAt!).toBeLessThan(10 * 60 * 1000)
   await context.setOffline(true)

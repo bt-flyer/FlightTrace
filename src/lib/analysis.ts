@@ -1,4 +1,5 @@
 import type { DiagnosticEvent, DiagnosticRule, FlightRule, FlightSegment, ParsedLog } from '../types'
+import { continuityLimit } from './insightSamples'
 
 export const FLIGHT_DETECTION_VERSION = 2
 
@@ -14,24 +15,19 @@ function compare(value: number, operator: NonNullable<DiagnosticRule['operator']
   }
 }
 
-function intervalsFromMask(mask: boolean[], timestamps: number[], minimumDurationMs: number, mergeGapMs = 0) {
+function intervalsFromMask(mask: boolean[], timestamps: number[], minimumDurationMs: number, maximumGapMs: number) {
   const intervals: Array<{ startMs: number; endMs: number; startIndex: number; endIndex: number }> = []
   let startIndex: number | null = null
   for (let index = 0; index <= mask.length; index += 1) {
-    if (mask[index] && startIndex === null) startIndex = index
-    if ((!mask[index] || index === mask.length) && startIndex !== null) {
+    const broken = index > 0 && (timestamps[index] <= timestamps[index - 1] || timestamps[index] - timestamps[index - 1] > maximumGapMs)
+    if ((!mask[index] || broken || index === mask.length) && startIndex !== null) {
       const endIndex = Math.max(startIndex, index - 1)
       if (timestamps[endIndex] - timestamps[startIndex] >= minimumDurationMs) {
-        const previous = intervals.at(-1)
-        if (previous && timestamps[startIndex] - previous.endMs <= mergeGapMs) {
-          previous.endMs = timestamps[endIndex]
-          previous.endIndex = endIndex
-        } else {
-          intervals.push({ startMs: timestamps[startIndex], endMs: timestamps[endIndex], startIndex, endIndex })
-        }
+        intervals.push({ startMs: timestamps[startIndex], endMs: timestamps[endIndex], startIndex, endIndex })
       }
       startIndex = null
     }
+    if (mask[index] && startIndex === null) startIndex = index
   }
   return intervals
 }
@@ -109,8 +105,9 @@ export function detectFlights(parsed: ParsedLog, modelId: string, logId: string,
 
 export function evaluateRules(parsed: ParsedLog, logId: string, rules: DiagnosticRule[]): DiagnosticEvent[] {
   const events: DiagnosticEvent[] = []
+  const maximumGapMs = continuityLimit(parsed)
   for (const rule of rules.filter((candidate) => candidate.enabled)) {
-    const inputs = rule.channelKeys.map((key) => parsed.series[key]).filter(Boolean)
+    const inputs = rule.channelKeys.map((key) => parsed.series[key] ?? [])
     if (!inputs.length) continue
 
     if (rule.kind === 'gap') {
@@ -128,24 +125,36 @@ export function evaluateRules(parsed: ParsedLog, logId: string, rules: Diagnosti
       continue
     }
 
-    const mask = parsed.timestamps.map((_, index) => {
-      const states = inputs.map((values) => {
+    const active = inputs.map(() => false)
+    const mask = parsed.timestamps.map((timestamp, index) => {
+      const continuous = index > 0 && timestamp > parsed.timestamps[index - 1] && timestamp - parsed.timestamps[index - 1] <= maximumGapMs
+      if (!continuous) active.fill(false)
+      const states = inputs.map((values, inputIndex) => {
         const value = values[index]
-        if (value === null) return false
+        if (value === null || value === undefined || !Number.isFinite(value)) { active[inputIndex] = false; return false }
         if (rule.kind === 'rate') {
-          if (!index || values[index - 1] === null) return false
+          if (!continuous || values[index - 1] == null) return false
           const seconds = (parsed.timestamps[index] - parsed.timestamps[index - 1]) / 1000
           return seconds > 0 && Math.abs(value - (values[index - 1] as number)) / seconds > (rule.value ?? 0)
         }
-        if (rule.kind === 'transition') return index > 0 && values[index - 1] !== value && value === rule.value
-        return compare(value, rule.operator ?? '>', rule.value ?? 0, rule.secondValue)
+        if (rule.kind === 'transition') return continuous && values[index - 1] != null && values[index - 1] !== value && value === rule.value
+        const operator = rule.operator ?? '>'
+        let first = rule.value ?? 0
+        let second = rule.secondValue
+        const margin = active[inputIndex] ? Math.max(0, rule.hysteresis) : 0
+        if (operator === '<' || operator === '<=') first += margin
+        if (operator === '>' || operator === '>=') first -= margin
+        if (operator === 'outside') { first += margin; second = (second ?? rule.value ?? 0) - margin }
+        if (operator === 'inside') { first -= margin; second = (second ?? rule.value ?? 0) + margin }
+        active[inputIndex] = compare(value, operator, first, second)
+        return active[inputIndex]
       })
       return rule.aggregation === 'all' ? states.every(Boolean) : states.some(Boolean)
     })
 
-    for (const interval of intervalsFromMask(mask, parsed.timestamps, rule.minimumDurationMs)) {
+    for (const interval of intervalsFromMask(mask, parsed.timestamps, rule.minimumDurationMs, maximumGapMs)) {
       const values = inputs.flatMap((series) => series.slice(interval.startIndex, interval.endIndex + 1)).filter((value): value is number => value !== null)
-      const peak = values.length ? (rule.operator === '<' || rule.operator === '<=' ? Math.min(...values) : Math.max(...values)) : undefined
+      const peak = values.length ? values.reduce((result, value) => rule.operator === '<' || rule.operator === '<=' ? Math.min(result, value) : Math.max(result, value)) : undefined
       events.push({
         id: crypto.randomUUID(), logId, ruleId: rule.id, ruleName: rule.name, severity: rule.severity,
         channelKeys: rule.channelKeys, startMs: interval.startMs, endMs: interval.endMs, peakValue: peak,

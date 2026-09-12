@@ -313,6 +313,32 @@ footer a { color: #91a8b7; text-decoration: underline; text-underline-offset: 2p
 footer a:hover { color: var(--mint); }
 .visually-hidden { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
 
+.flight-insights { display: grid; gap: 18px; margin: 18px 0; }
+.flight-insights .analysis-panel { min-width: 0; margin: 0; }
+.insight-note { font-size: .8rem; line-height: 1.65; }
+.insight-count { color: var(--mint); font-size: .75rem; white-space: nowrap; }
+.incident-list, .rf-pairs { display: grid; gap: 12px; }
+.incident-card { min-width: 0; border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+.incident-card > p { font-size: .85rem; line-height: 1.6; }
+.incident-card h3 { margin: 0 0 12px; font-size: .95rem; }
+.incident-heading, .incident-heading > div { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.incident-heading { justify-content: space-between; }
+.incident-heading .muted { font-size: .75rem; }
+.flight-insights summary { cursor: pointer; font-size: .8rem; color: var(--muted); padding: 6px 0; }
+.incident-observations { padding-left: 20px; font-size: .8rem; line-height: 1.8; }
+.incident-observations time { display: inline-block; min-width: 80px; color: var(--mint); }
+.incident-observations small { color: var(--muted); }
+.history-finding { display: flex; flex-wrap: wrap; gap: 10px 20px; align-items: center; padding: 12px 0; border-top: 1px solid var(--line); font-size: .85rem; }
+.history-finding > span:first-of-type { color: var(--muted); }
+.history-details { margin-top: 12px; }
+.rf-metrics { display: flex; flex-wrap: wrap; gap: 16px 32px; margin: 12px 0; }
+.rf-metrics dt { font-size: .75rem; color: var(--muted); }
+.rf-metrics dd { margin: 6px 0; font-size: 1.1rem; }
+.rf-metrics small { color: var(--muted); font-size: .75rem; }
+.rf-episodes { padding: 0; list-style: none; }
+.rf-episodes li, .trace-focus-note { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 0; font-size: .8rem; }
+.trace-focus-note { color: var(--mint); }
+
 @media (max-width: 850px) {
   .site-header nav { position: fixed; left: 50%; bottom: 10px; transform: translateX(-50%); z-index: 30; display: flex; align-items: center; gap: 4px; padding: 5px; border: 1px solid #315064; border-radius: 13px; background: rgba(9, 22, 32, .96); box-shadow: 0 12px 36px rgba(0,0,0,.45); backdrop-filter: blur(16px); }
   .site-header nav a { padding: 9px 12px; border-radius: 9px; white-space: nowrap; }
@@ -392,5 +418,7 @@ footer a:hover { color: var(--mint); }
   .chart-host { break-inside: avoid; }
   .analysis-grid { grid-template-columns: 1fr 1fr; }
   .flight-map-panel { break-inside: avoid; }
+  .incident-card { break-inside: avoid; }
+  .flight-insights summary, .insight-count, .incident-observations time, .rf-metrics dt, .history-finding > span:first-of-type { color: #444; }
   .flight-map, .flight-map-wrap { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
 }
