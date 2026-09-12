@@ -6,8 +6,8 @@ import type { ChannelDefinition, ParsedLog } from '../types'
 export const MAX_GRAPH_CHANNELS = 24
 
 const colors = [
-  '#35d0ba', '#f3b64b', '#67a7ff', '#fa6d86', '#ad8cff', '#79d279',
-  '#38c6e8', '#ff8a52', '#e87fc2', '#7b8cff', '#b9d653', '#d9a9ff'
+  '#087f70', '#a45a06', '#2563b8', '#bf3455', '#7653b9', '#387d35',
+  '#087f9b', '#bc4f1b', '#a23886', '#5159b8', '#737b17', '#92578e'
 ]
 
 export function TelemetryChart({ parsed, channelKeys, onCursorTimeChange, expanded = false, showPoints = false, focusRange }: { parsed: ParsedLog; channelKeys: string[]; onCursorTimeChange?: (timestamp: number) => void; expanded?: boolean; showPoints?: boolean; focusRange?: { startMs: number; endMs: number } }) {
@@ -33,8 +33,8 @@ export function TelemetryChart({ parsed, channelKeys, onCursorTimeChange, expand
       hooks: { setCursor: [(plot) => { const index = plot.cursor.idx; if (index !== null && index !== undefined) onCursorTimeChange?.(parsed.timestamps[index]) }] },
       scales: { ...Object.fromEntries(units.map((unit) => [unit, { auto: true }])), x: { time: false } },
       axes: [
-        { label: 'Elapsed time (seconds)', stroke: '#8fa5b8', grid: { stroke: '#1e3041' }, ticks: { stroke: '#355066' } },
-        ...units.slice(0, 3).map((unit, index) => ({ scale: unit, label: unit, side: index % 2 ? 1 : 3, stroke: colors[index], grid: { show: index === 0, stroke: '#1e3041' }, ticks: { stroke: '#355066' } } as uPlot.Axis))
+        { label: 'Elapsed time (seconds)', stroke: '#516779', grid: { stroke: '#dce5ed' }, ticks: { stroke: '#a6bac9' } },
+        ...units.slice(0, 3).map((unit, index) => ({ scale: unit, label: unit, side: index % 2 ? 1 : 3, stroke: colors[index], grid: { show: index === 0, stroke: '#dce5ed' }, ticks: { stroke: '#a6bac9' } } as uPlot.Axis))
       ],
       series: [
         {},

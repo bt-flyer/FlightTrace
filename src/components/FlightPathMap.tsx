@@ -31,9 +31,9 @@ function formatAltitude(value: number, unit?: string): string {
 }
 
 function altitudeColor(altitude: number | undefined, minimum: number | undefined, maximum: number | undefined): string {
-  if (altitude === undefined || minimum === undefined || maximum === undefined) return 'hsl(161 75% 55%)'
+  if (altitude === undefined || minimum === undefined || maximum === undefined) return 'hsl(172 88% 26%)'
   const ratio = maximum === minimum ? 0.5 : Math.max(0, Math.min(1, (altitude - minimum) / (maximum - minimum)))
-  return `hsl(${205 - ratio * 193} 86% 58%)`
+  return `hsl(${205 - ratio * 193} 78% 35%)`
 }
 
 function thinSegment(points: FlightTrackPoint[]): FlightTrackPoint[] {
