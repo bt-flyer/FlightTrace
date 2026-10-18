@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ChannelDefinition, ParsedLog } from '../types'
-import { buildFlightTrack, detectGpsChannels } from './gps'
+import { buildFlightTrack, combinedGpsChannels, detectGpsChannels, parseGpsCell } from './gps'
 
 function channel(key: string, label: string, unit = 'deg', index = 0): ChannelDefinition {
   return { key, rawLabel: label, label, unit, occurrence: 1, index, kind: 'numeric' }
@@ -16,6 +16,26 @@ function parsed(channels: ChannelDefinition[], series: ParsedLog['series']): Par
 }
 
 describe('GPS telemetry', () => {
+  it('splits FrSky GPS cells into numeric coordinates for mapping', () => {
+    const channels = combinedGpsChannels([channel('gps', 'GPS', '', 32), channel('alt', 'GPS alt', 'm', 33)])
+    const cells = ['43.6739000 -79.8920000', '', '43.6753000 -79.8906000'].map(parseGpsCell)
+    const log = parsed(channels, Object.fromEntries(channels.map((channel, index) => [channel.key, cells.map((cell) => cell?.[index] ?? null)])))
+    const track = buildFlightTrack(log)
+    expect(track?.pointCount).toBe(2)
+    expect(track?.minLatitude).toBe(43.6739)
+    expect(track?.minLongitude).toBe(-79.892)
+    expect(track?.distanceMeters).toBeGreaterThan(100)
+    expect(channels.map((channel) => channel.index)).toEqual([32, 32])
+  })
+
+  it('rejects malformed and out-of-range combined GPS cells', () => {
+    for (const raw of ['', '43.6', '43.6 -79.8 extra', '91 -79', '43 -181', 'NaN -79']) {
+      expect(parseGpsCell(raw)).toBeUndefined()
+    }
+    expect(parseGpsCell('  -43.6   +79.8  ')).toEqual([-43.6, 79.8])
+    expect(parseGpsCell('0 0')).toEqual([0, 0])
+  })
+
   it('detects common DJI-style coordinates and colors the track from altitude data', () => {
     const log = parsed([
       channel('lat', 'Latitude', 'deg', 0),

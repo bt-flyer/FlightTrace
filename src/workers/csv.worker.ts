@@ -3,6 +3,7 @@ import Papa from 'papaparse'
 import { createSHA256 } from 'hash-wasm'
 import { isTimestampLabel, normalizeToken, parseHeader } from '../lib/channels'
 import { deriveLipoTelemetry } from '../lib/lipoTelemetry'
+import { combinedGpsChannels, parseGpsCell } from '../lib/gps'
 import { medianCadence, summarizeChannel } from '../lib/statistics'
 import type { ChannelDefinition, ParsedLog, WorkerRequest, WorkerResponse } from '../types'
 
@@ -99,6 +100,9 @@ async function parseLog(file: File | Blob, fileName: string, requestId: string):
   const channels = header
     .map((value, index) => parseHeader(value, index, occurrences))
     .filter((channel) => !isTimestampLabel(channel.rawLabel))
+  const gpsChannels = combinedGpsChannels(channels)
+  channels.push(...gpsChannels)
+  const gpsKeys = new Map(gpsChannels.map((channel, index) => [channel.key, index % 2]))
   const series = Object.fromEntries(channels.map((channel) => [channel.key, [] as Array<number | null>]))
   const nonNumeric = new Map<string, number>()
   const timestamps: number[] = []
@@ -119,7 +123,10 @@ async function parseLog(file: File | Blob, fileName: string, requestId: string):
     timestampLabels.push(timestamp.local)
     for (const channel of channels) {
       const raw = String(row[channel.index] ?? '').trim()
-      const numeric = raw === '' ? null : Number(raw)
+      const coordinateIndex = gpsKeys.get(channel.key)
+      const numeric = coordinateIndex === undefined
+        ? raw === '' ? null : Number(raw)
+        : parseGpsCell(raw)?.[coordinateIndex] ?? null
       if (raw !== '' && !Number.isFinite(numeric)) nonNumeric.set(channel.key, (nonNumeric.get(channel.key) ?? 0) + 1)
       series[channel.key].push(Number.isFinite(numeric) ? numeric : null)
     }

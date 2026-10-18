@@ -31,6 +31,26 @@ export interface FlightTrack {
 
 type CoordinateRole = 'latitude' | 'longitude'
 
+// FrSky logs record both decimal-degree coordinates in a single GPS cell.
+export function parseGpsCell(raw: string): [number, number] | undefined {
+  const match = raw.trim().match(/^([+-]?\d+(?:\.\d+)?)\s+([+-]?\d+(?:\.\d+)?)$/)
+  if (!match) return undefined
+  const latitude = Number(match[1])
+  const longitude = Number(match[2])
+  if (Math.abs(latitude) > 90 || Math.abs(longitude) > 180) return undefined
+  return [latitude, longitude]
+}
+
+export function combinedGpsChannels(channels: ChannelDefinition[]): ChannelDefinition[] {
+  return channels.filter((channel) => /^gps$/i.test(channel.rawLabel.trim())).flatMap((source) =>
+    ['Latitude', 'Longitude'].map((role) => ({
+      key: `derived|${source.key}|${role.toLowerCase()}`,
+      rawLabel: `GPS ${role}`, label: `GPS ${role}`, unit: 'deg',
+      occurrence: source.occurrence, index: source.index, kind: 'numeric' as const
+    }))
+  )
+}
+
 const BAD_LOCATION_WORDS = /\b(home|takeoff|pilot|controller|remote|return|start|target|waypoint)\b/
 const BAD_ALTITUDE_WORDS = /\b(home|takeoff|max(?:imum)?|min(?:imum)?|needed|required|limit|warning|target)\b/
 
