@@ -433,3 +433,8 @@ footer a:hover { color: var(--mint); }
   .flight-insights summary, .insight-count, .incident-observations time, .rf-metrics dt, .history-finding > span:first-of-type { color: #444; }
   .flight-map, .flight-map-wrap { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
 }
+
+.flight-map-controls { flex-wrap: wrap; }
+.flight-map-color-control { display: flex; align-items: center; gap: 8px; color: var(--text); }
+.flight-map-color-control select { max-width: min(320px, 65vw); padding: 7px 10px; }
+.flight-map-missing { color: var(--muted); font-size: .75rem; }

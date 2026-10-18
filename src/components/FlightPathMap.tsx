@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
+import { displayChannelName } from '../lib/channels'
 import { buildFlightTrack, type FlightTrackPoint } from '../lib/gps'
-import { convertQuantityValue, type UnitPreferences } from '../lib/units'
+import { channelQuantity, convertQuantityValue, type UnitPreferences } from '../lib/units'
 import type { ParsedLog } from '../types'
 
 const WIDTH = 1000
@@ -30,9 +31,9 @@ function formatAltitude(value: number, unit?: string): string {
   return `${value.toFixed(Math.abs(value) < 100 ? 1 : 0)}${unit ? ` ${unit}` : ''}`
 }
 
-function altitudeColor(altitude: number | undefined, minimum: number | undefined, maximum: number | undefined): string {
-  if (altitude === undefined || minimum === undefined || maximum === undefined) return 'hsl(172 88% 26%)'
-  const ratio = maximum === minimum ? 0.5 : Math.max(0, Math.min(1, (altitude - minimum) / (maximum - minimum)))
+function metricColor(value: number | undefined, minimum: number | undefined, maximum: number | undefined): string {
+  if (value === undefined || minimum === undefined || maximum === undefined) return '#64748b'
+  const ratio = maximum === minimum ? 0.5 : Math.max(0, Math.min(1, (value - minimum) / (maximum - minimum)))
   return `hsl(${205 - ratio * 193} 78% 35%)`
 }
 
@@ -91,9 +92,38 @@ function mapViewport(minLatitude: number, maxLatitude: number, minLongitude: num
 export function FlightPathMap({ parsed, unitPreferences }: { parsed: ParsedLog; unitPreferences: UnitPreferences }) {
   const [showBasemap, setShowBasemap] = useState(false)
   const [tileError, setTileError] = useState(false)
+  const [colorKey, setColorKey] = useState('')
   const track = useMemo(() => buildFlightTrack(parsed), [parsed])
   if (!track || !track.segments.length) return null
 
+  const colorChannels = parsed.channels.filter((channel) => {
+    if (channel.kind !== 'numeric') return false
+    const quantity = channelQuantity(channel)
+    return (quantity === 'altitude' || quantity === 'speed' || /rssi|vfr|lq|link.?quality|signal|snr|rsnr/i.test(channel.rawLabel))
+      && track.segments.some((segment) => segment.some((point) => {
+        const value = parsed.series[channel.key]?.[point.index]
+        return value != null && Number.isFinite(value)
+      }))
+  })
+  const colorChannel = colorChannels.find((channel) => channel.key === colorKey)
+    ?? colorChannels.find((channel) => channel.key === track.channels.altitudeKey) ?? colorChannels[0]
+  const metricLabel = colorChannel?.label ?? 'Telemetry'
+  const metricValue = (point: FlightTrackPoint) => {
+    const value = colorChannel ? parsed.series[colorChannel.key]?.[point.index] : undefined
+    return value != null && Number.isFinite(value) ? value : undefined
+  }
+  let minimum: number | undefined
+  let maximum: number | undefined
+  let missingValues = false
+  for (const segment of track.segments) for (const point of segment) {
+    const value = metricValue(point)
+    if (value === undefined) missingValues = true
+    else {
+      minimum = minimum === undefined ? value : Math.min(minimum, value)
+      maximum = maximum === undefined ? value : Math.max(maximum, value)
+    }
+  }
+  const colorDescription = colorChannel?.key === track.channels.altitudeKey ? 'altitude' : metricLabel
   const viewport = mapViewport(track.minLatitude, track.maxLatitude, track.minLongitude, track.maxLongitude)
   const project = (point: FlightTrackPoint) => {
     const world = worldPosition(point.latitude, point.longitude, viewport.zoom)
@@ -108,7 +138,7 @@ export function FlightPathMap({ parsed, unitPreferences }: { parsed: ParsedLog; 
 
   return <section className="analysis-panel flight-map-panel" aria-labelledby="flight-path-title">
     <div className="panel-heading flight-map-heading">
-      <div><span className="eyebrow">Position trace</span><h2 id="flight-path-title">Flight path</h2><p>Route colors show altitude from low to high. GPS analysis stays on this device.</p></div>
+      <div><span className="eyebrow">Position trace</span><h2 id="flight-path-title">Flight path</h2><p>Choose speed, altitude, or a signal metric to color the route from low to high. GPS analysis stays on this device.</p></div>
       <div className="flight-map-stats">
         <span><small>GPS distance</small><strong>{formatDistance(track.distanceMeters, unitPreferences)}</strong></span>
         <span><small>Coordinate coverage</small><strong>{(track.coordinateCoverage * 100).toFixed(1)}%</strong></span>
@@ -116,15 +146,19 @@ export function FlightPathMap({ parsed, unitPreferences }: { parsed: ParsedLog; 
       </div>
     </div>
     <div className="flight-map-controls no-print">
+      <label className="flight-map-color-control">Color route by <select aria-label="Color route by" value={colorChannel?.key ?? ''} onChange={(event) => setColorKey(event.target.value)} disabled={!colorChannels.length}>
+        {!colorChannels.length && <option value="">No telemetry available</option>}
+        {colorChannels.map((channel) => <option key={channel.key} value={channel.key}>{displayChannelName(channel)}</option>)}
+      </select></label>
       <button className="button ghost small" aria-pressed={showBasemap} onClick={() => { setTileError(false); setShowBasemap((current) => !current) }}>{showBasemap ? 'Hide street map' : 'Load street map'}</button>
       <span>{showBasemap ? 'Street tiles are loaded from OpenStreetMap.' : 'Loading the street map shares the approximate flight area with OpenStreetMap.'}</span>
     </div>
     {tileError && <p className="flight-map-error" role="status">Some map tiles could not be loaded. The recorded route is still available.</p>}
     <div className="flight-map-wrap">
       {showBasemap && <div className="flight-map-tiles" aria-hidden="true">{viewport.tiles.map((tile) => <img key={tile.key} src={tile.url} alt="" style={{ left: `${tile.x / WIDTH * 100}%`, top: `${tile.y / HEIGHT * 100}%`, width: `${TILE_SIZE / WIDTH * 100}%`, height: `${TILE_SIZE / HEIGHT * 100}%` }} onError={() => setTileError(true)} />)}<span className="flight-map-tile-shade" /></div>}
-      <svg className="flight-map" viewBox={`0 0 ${WIDTH} ${HEIGHT}`} role="img" aria-label="GPS flight path colored by altitude">
+      <svg className="flight-map" viewBox={`0 0 ${WIDTH} ${HEIGHT}`} role="img" aria-label={`GPS flight path colored by ${colorDescription}`}>
         <title>GPS flight path</title>
-        <desc>The recorded flight route. Blue portions are lower altitude and red portions are higher altitude.</desc>
+        <desc>The recorded flight route colored by {metricLabel}. Blue indicates lower values and red indicates higher values. Gray indicates missing telemetry.</desc>
         <rect className={`flight-map-background${showBasemap ? ' basemap' : ''}`} width={WIDTH} height={HEIGHT} rx="14" />
         {!showBasemap && [0.2, 0.4, 0.6, 0.8].map((fraction) => <g key={fraction} className="flight-map-grid"><line x1={WIDTH * fraction} y1={0} x2={WIDTH * fraction} y2={HEIGHT} /><line x1={0} y1={HEIGHT * fraction} x2={WIDTH} y2={HEIGHT * fraction} /></g>)}
         <text className="flight-map-north" x={WIDTH - 35} y={34} textAnchor="middle">N ↑</text>
@@ -134,8 +168,10 @@ export function FlightPathMap({ parsed, unitPreferences }: { parsed: ParsedLog; 
             const previous = points[index]
             const from = project(previous)
             const to = project(point)
-            const altitude = point.altitude === undefined || previous.altitude === undefined ? point.altitude ?? previous.altitude : (point.altitude + previous.altitude) / 2
-            return <line key={`${segmentIndex}-${point.index}`} className="flight-path-segment" x1={from.x} y1={from.y} x2={to.x} y2={to.y} stroke={altitudeColor(altitude, track.minAltitude, track.maxAltitude)} />
+            const currentValue = metricValue(point)
+            const previousValue = metricValue(previous)
+            const value = currentValue === undefined || previousValue === undefined ? undefined : (currentValue + previousValue) / 2
+            return <line key={`${segmentIndex}-${point.index}`} className="flight-path-segment" x1={from.x} y1={from.y} x2={to.x} y2={to.y} stroke={metricColor(value, minimum, maximum)} />
           })}</g>
         })}
         <circle className="flight-map-marker start" cx={startPosition.x} cy={startPosition.y} r="9" />
@@ -147,8 +183,9 @@ export function FlightPathMap({ parsed, unitPreferences }: { parsed: ParsedLog; 
       </svg>
       {showBasemap && <a className="flight-map-attribution" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap contributors</a>}
     </div>
-    <div className="flight-altitude-legend" aria-label={hasAltitude ? 'Altitude color scale' : 'Altitude unavailable'}>
-      {hasAltitude ? <><span>{formatAltitude(track.minAltitude!, track.channels.altitudeUnit)}</span><i /><span>{formatAltitude(track.maxAltitude!, track.channels.altitudeUnit)}</span></> : <><span>Flight path</span><i className="unavailable" /><span>Altitude unavailable</span></>}
+    <div className="flight-altitude-legend" aria-label={`${metricLabel} color scale`}>
+      {minimum !== undefined && maximum !== undefined ? <><span>{metricLabel}: {formatAltitude(minimum, colorChannel?.unit)}</span><i /><span>{formatAltitude(maximum, colorChannel?.unit)}</span></> : <><span>Flight path</span><i className="unavailable" /><span>Telemetry unavailable</span></>}
     </div>
+    {missingValues && <p className="flight-map-missing">Gray route sections have missing {metricLabel} data.</p>}
   </section>
 }
