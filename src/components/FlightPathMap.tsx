@@ -11,6 +11,8 @@ const MAX_RENDERED_POINTS = 1400
 const TILE_SIZE = 256
 const MAX_MERCATOR_LATITUDE = 85.05112878
 
+type Basemap = 'none' | 'street' | 'satellite'
+
 interface MapTile { key: string; url: string; x: number; y: number }
 
 interface MapViewport {
@@ -55,7 +57,7 @@ function worldPosition(latitude: number, longitude: number, zoom: number) {
   }
 }
 
-function mapViewport(minLatitude: number, maxLatitude: number, minLongitude: number, maxLongitude: number): MapViewport {
+function mapViewport(minLatitude: number, maxLatitude: number, minLongitude: number, maxLongitude: number, basemap: Basemap): MapViewport {
   let zoom = 1
   for (let candidate = 19; candidate >= 1; candidate -= 1) {
     const northwest = worldPosition(maxLatitude, minLongitude, candidate)
@@ -80,7 +82,9 @@ function mapViewport(minLatitude: number, maxLatitude: number, minLongitude: num
       const wrappedX = ((tileX % tileLimit) + tileLimit) % tileLimit
       tiles.push({
         key: `${zoom}-${tileX}-${tileY}`,
-        url: `https://tile.openstreetmap.org/${zoom}/${wrappedX}/${tileY}.png`,
+        url: basemap === 'satellite'
+          ? `https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${zoom}/${tileY}/${wrappedX}`
+          : `https://tile.openstreetmap.org/${zoom}/${wrappedX}/${tileY}.png`,
         x: tileX * TILE_SIZE - left,
         y: tileY * TILE_SIZE - top
       })
@@ -90,7 +94,8 @@ function mapViewport(minLatitude: number, maxLatitude: number, minLongitude: num
 }
 
 export function FlightPathMap({ parsed, unitPreferences }: { parsed: ParsedLog; unitPreferences: UnitPreferences }) {
-  const [showBasemap, setShowBasemap] = useState(false)
+  const [basemap, setBasemap] = useState<Basemap>('none')
+  const showBasemap = basemap !== 'none'
   const [tileError, setTileError] = useState(false)
   const [colorKey, setColorKey] = useState('')
   const track = useMemo(() => buildFlightTrack(parsed), [parsed])
@@ -124,7 +129,7 @@ export function FlightPathMap({ parsed, unitPreferences }: { parsed: ParsedLog; 
     }
   }
   const colorDescription = colorChannel?.key === track.channels.altitudeKey ? 'altitude' : metricLabel
-  const viewport = mapViewport(track.minLatitude, track.maxLatitude, track.minLongitude, track.maxLongitude)
+  const viewport = mapViewport(track.minLatitude, track.maxLatitude, track.minLongitude, track.maxLongitude, basemap)
   const project = (point: FlightTrackPoint) => {
     const world = worldPosition(point.latitude, point.longitude, viewport.zoom)
     return { x: world.x - viewport.left, y: world.y - viewport.top }
@@ -150,12 +155,13 @@ export function FlightPathMap({ parsed, unitPreferences }: { parsed: ParsedLog; 
         {!colorChannels.length && <option value="">No telemetry available</option>}
         {colorChannels.map((channel) => <option key={channel.key} value={channel.key}>{displayChannelName(channel)}</option>)}
       </select></label>
-      <button className="button ghost small" aria-pressed={showBasemap} onClick={() => { setTileError(false); setShowBasemap((current) => !current) }}>{showBasemap ? 'Hide street map' : 'Load street map'}</button>
-      <span>{showBasemap ? 'Street tiles are loaded from OpenStreetMap.' : 'Loading the street map shares the approximate flight area with OpenStreetMap.'}</span>
+      <button className="button ghost small" aria-pressed={basemap === 'street'} onClick={() => { setTileError(false); setBasemap((current) => current === 'street' ? 'none' : 'street') }}>{basemap === 'street' ? 'Hide street map' : 'Load street map'}</button>
+      <button className="button ghost small" aria-pressed={basemap === 'satellite'} onClick={() => { setTileError(false); setBasemap((current) => current === 'satellite' ? 'none' : 'satellite') }}>{basemap === 'satellite' ? 'Hide satellite map' : 'Load satellite map'}</button>
+      <span>{basemap === 'satellite' ? 'Satellite imagery is loaded from Esri.' : basemap === 'street' ? 'Street tiles are loaded from OpenStreetMap.' : 'Loading the street map shares the approximate flight area with OpenStreetMap. Loading satellite imagery shares it with Esri.'}</span>
     </div>
     {tileError && <p className="flight-map-error" role="status">Some map tiles could not be loaded. The recorded route is still available.</p>}
-    <div className="flight-map-wrap">
-      {showBasemap && <div className="flight-map-tiles" aria-hidden="true">{viewport.tiles.map((tile) => <img key={tile.key} src={tile.url} alt="" style={{ left: `${tile.x / WIDTH * 100}%`, top: `${tile.y / HEIGHT * 100}%`, width: `${TILE_SIZE / WIDTH * 100}%`, height: `${TILE_SIZE / HEIGHT * 100}%` }} onError={() => setTileError(true)} />)}<span className="flight-map-tile-shade" /></div>}
+    <div className={`flight-map-wrap${basemap === 'satellite' ? ' satellite' : ''}`}>
+      {showBasemap && <div className="flight-map-tiles" aria-hidden="true">{viewport.tiles.map((tile) => <img key={`${basemap}-${tile.key}`} src={tile.url} alt="" style={{ left: `${tile.x / WIDTH * 100}%`, top: `${tile.y / HEIGHT * 100}%`, width: `${TILE_SIZE / WIDTH * 100}%`, height: `${TILE_SIZE / HEIGHT * 100}%` }} onError={() => setTileError(true)} />)}<span className="flight-map-tile-shade" /></div>}
       <svg className="flight-map" viewBox={`0 0 ${WIDTH} ${HEIGHT}`} role="img" aria-label={`GPS flight path colored by ${colorDescription}`}>
         <title>GPS flight path</title>
         <desc>The recorded flight route colored by {metricLabel}. Blue indicates lower values and red indicates higher values. Gray indicates missing telemetry.</desc>
@@ -171,7 +177,7 @@ export function FlightPathMap({ parsed, unitPreferences }: { parsed: ParsedLog; 
             const currentValue = metricValue(point)
             const previousValue = metricValue(previous)
             const value = currentValue === undefined || previousValue === undefined ? undefined : (currentValue + previousValue) / 2
-            return <line key={`${segmentIndex}-${point.index}`} className="flight-path-segment" x1={from.x} y1={from.y} x2={to.x} y2={to.y} stroke={metricColor(value, minimum, maximum)} />
+            return <g key={`${segmentIndex}-${point.index}`}><line className="flight-path-halo" x1={from.x} y1={from.y} x2={to.x} y2={to.y} /><line className="flight-path-segment" x1={from.x} y1={from.y} x2={to.x} y2={to.y} stroke={metricColor(value, minimum, maximum)} /></g>
           })}</g>
         })}
         <circle className="flight-map-marker start" cx={startPosition.x} cy={startPosition.y} r="9" />
@@ -181,7 +187,8 @@ export function FlightPathMap({ parsed, unitPreferences }: { parsed: ParsedLog; 
         <text className="flight-map-coordinate" x={18} y={HEIGHT - 18}>{track.minLatitude.toFixed(5)}, {track.minLongitude.toFixed(5)}</text>
         <text className="flight-map-coordinate" x={WIDTH - 18} y={HEIGHT - 18} textAnchor="end">{track.maxLatitude.toFixed(5)}, {track.maxLongitude.toFixed(5)}</text>
       </svg>
-      {showBasemap && <a className="flight-map-attribution" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap contributors</a>}
+      {basemap === 'satellite' && <a className="flight-map-attribution" href="https://www.arcgis.com/home/item.html?id=10df2279f9684e4a9f6a7f08febac2a9" target="_blank" rel="noreferrer">Imagery © Esri, Vantor, Earthstar Geographics, and the GIS User Community</a>}
+      {basemap === 'street' && <a className="flight-map-attribution" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap contributors</a>}
     </div>
     <div className="flight-altitude-legend" aria-label={`${metricLabel} color scale`}>
       {minimum !== undefined && maximum !== undefined ? <><span>{metricLabel}: {formatAltitude(minimum, colorChannel?.unit)}</span><i /><span>{formatAltitude(maximum, colorChannel?.unit)}</span></> : <><span>Flight path</span><i className="unavailable" /><span>Telemetry unavailable</span></>}

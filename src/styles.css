@@ -438,3 +438,7 @@ footer a:hover { color: var(--mint); }
 .flight-map-color-control { display: flex; align-items: center; gap: 8px; color: var(--text); }
 .flight-map-color-control select { max-width: min(320px, 65vw); padding: 7px 10px; }
 .flight-map-missing { color: var(--muted); font-size: .75rem; }
+
+.flight-path-halo { stroke: white; stroke-opacity: .85; stroke-width: 7; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.satellite .flight-map-north, .satellite .flight-map-coordinate { fill: white; paint-order: stroke; stroke: #172033; stroke-width: 3px; stroke-linejoin: round; }
+.flight-map-attribution { max-width: calc(100% - 14px); }

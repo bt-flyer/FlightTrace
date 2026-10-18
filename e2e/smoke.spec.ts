@@ -226,6 +226,11 @@ test('groups LiPo cells into pack voltage and cell-balance analysis', async ({ p
 
 test('maps flexible GPS columns and colors the flight path by altitude', async ({ page, browserName }) => {
   const tileRequests: string[] = []
+  const satelliteRequests: string[] = []
+  await page.route('https://services.arcgisonline.com/**', async (route) => {
+    satelliteRequests.push(route.request().url())
+    await route.fulfill({ status: 200, contentType: 'image/png', body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+X1WzNwAAAABJRU5ErkJggg==', 'base64') })
+  })
   await page.route('https://tile.openstreetmap.org/**', async (route) => {
     tileRequests.push(route.request().url())
     await route.fulfill({
@@ -264,6 +269,14 @@ test('maps flexible GPS columns and colors the flight path by altitude', async (
   await expect(page.getByText('16.4 ft – 148 ft')).toBeVisible()
   expect(tileRequests).toEqual([])
   await expect(page.getByText(/shares the approximate flight area/)).toBeVisible()
+  expect(satelliteRequests).toEqual([])
+  await page.getByRole('button', { name: 'Load satellite map' }).click()
+  await expect(page.getByRole('link', { name: /Imagery © Esri/ })).toBeVisible()
+  await expect(page.locator('.flight-map-tiles img').first()).toHaveAttribute('src', /World_Imagery\/MapServer\/tile\/\d+\/\d+\/\d+$/)
+  if (browserName !== 'webkit') await expect.poll(() => satelliteRequests.length).toBeGreaterThan(0)
+  await expect(page.locator('.flight-path-segment').first()).toBeVisible()
+  await page.getByRole('button', { name: 'Hide satellite map' }).click()
+  await expect(page.locator('.flight-map-tiles img')).toHaveCount(0)
   await page.getByRole('button', { name: 'Load street map' }).click()
   await expect(page.getByRole('link', { name: '© OpenStreetMap contributors' })).toBeVisible()
   await expect(page.locator('.flight-map-tiles img')).not.toHaveCount(0)
